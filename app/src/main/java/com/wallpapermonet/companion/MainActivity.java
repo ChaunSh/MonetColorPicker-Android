@@ -14,6 +14,7 @@ import android.widget.*;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.textfield.MaterialAutoCompleteTextView;
@@ -49,19 +50,61 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
     private LinearLayout page(){ScrollView s=new ScrollView(this);s.setFillViewport(true); LinearLayout p=new LinearLayout(this);p.setOrientation(LinearLayout.VERTICAL);p.setPadding(dp(20),dp(8),dp(20),dp(32));s.addView(p);p.setTag(s);return p;}
     private void showPage(boolean now){content.removeAllViews();View v=(View)(now?current:setup).getTag();content.addView(v);toolbar.setTitle(now?"当前配色":"设置配色");if(now)refreshSystem();}
     private TextView label(LinearLayout p,String text,int size){TextView t=new TextView(this);t.setText(text);t.setTextSize(size);t.setTextColor(0xff20232a);t.setPadding(0,dp(10),0,dp(6));p.addView(t);return t;}
-    private MaterialButton button(LinearLayout p,String text,Runnable r){MaterialButton b=new MaterialButton(this);b.setText(text);b.setOnClickListener(v->r.run());p.addView(b,new LinearLayout.LayoutParams(-1,-2));return b;}
+    private MaterialButton button(LinearLayout p,String text,Runnable r){MaterialButton b=action(text,r,false);p.addView(b,new LinearLayout.LayoutParams(-1,-2));return b;}
+    private MaterialButton action(String text,Runnable r,boolean secondary){MaterialButton b=secondary?new MaterialButton(this,null,com.google.android.material.R.attr.materialButtonOutlinedStyle):new MaterialButton(this);b.setText(text);b.setSingleLine(false);b.setMaxLines(2);b.setMinHeight(dp(48));b.setOnClickListener(v->r.run());return b;}
+    private void actions(LinearLayout parent,String left,Runnable leftAction,String right,Runnable rightAction){
+        AdaptiveActions row=new AdaptiveActions(this);row.addView(action(left,leftAction,true));row.addView(action(right,rightAction,true));parent.addView(row,new LinearLayout.LayoutParams(-1,-2));
+    }
+    /** Buttons stack when the available width cannot accommodate their actual scaled labels. */
+    private final class AdaptiveActions extends LinearLayout {
+        private Boolean stacked;
+        AdaptiveActions(Context context){super(context);}
+        @Override protected void onMeasure(int widthSpec,int heightSpec){
+            int width=MeasureSpec.getSize(widthSpec),widest=0;
+            for(int i=0;i<getChildCount();i++){MaterialButton b=(MaterialButton)getChildAt(i);widest=Math.max(widest,Math.max(dp(100),(int)Math.ceil(b.getPaint().measureText(b.getText().toString()))+dp(48)));}
+            int need=widest*getChildCount()+dp(8)*Math.max(0,getChildCount()-1);
+            boolean vertical=width<need;
+            if(stacked==null||stacked!=vertical){stacked=vertical;setOrientation(vertical?VERTICAL:HORIZONTAL);
+                for(int i=0;i<getChildCount();i++){LayoutParams lp=new LayoutParams(vertical?LayoutParams.MATCH_PARENT:0,LayoutParams.WRAP_CONTENT,vertical?0:1);if(!vertical&&i>0)lp.setMarginStart(dp(8));getChildAt(i).setLayoutParams(lp);}}
+            super.onMeasure(widthSpec,heightSpec);
+        }
+    }
     private LinearLayout box(LinearLayout p){LinearLayout b=new LinearLayout(this);b.setOrientation(LinearLayout.VERTICAL);p.addView(b);return b;}
-    private void buildSetup(){label(setup,"当前图片",22);image=new ImageView(this);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);setup.addView(image,new LinearLayout.LayoutParams(-1,dp(220))); imageInfo=label(setup,"",14);showImage();
-        button(setup,"读取当前壁纸",this::wallpaper);button(setup,"选择图片并裁切",()->{imageGeneration++;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,PICK_IMAGE);});
-        progress=new ProgressBar(this);progress.setVisibility(View.GONE);setup.addView(progress);label(setup,"候选主色",22);candidatesBox=box(setup);
-        View controls=getLayoutInflater().inflate(R.layout.view_theme_controls,setup,false);setup.addView(controls);seedInput=controls.findViewById(R.id.seed_input);TextInputLayout seedLayout=controls.findViewById(R.id.seed_layout);controls.findViewById(R.id.seed_apply).setOnClickListener(v->{try{seed=ThemeConfig.parseColor(seedInput.getText().toString().trim());colorRevision++;allowPendingAutoSeed=false;seedLayout.setError(null);calculate();}catch(Exception e){seedLayout.setError("请输入有效的不透明 HEX 颜色");}});
+    private LinearLayout section(LinearLayout parent,String title,String description){
+        MaterialCardView card=new MaterialCardView(this);card.setRadius(dp(20));card.setCardElevation(0);card.setCardBackgroundColor(0xfff0f0f4);card.setStrokeColor(0xffdcdde2);card.setStrokeWidth(dp(1));
+        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.bottomMargin=dp(16);parent.addView(card,cp);
+        LinearLayout inner=new LinearLayout(this);inner.setOrientation(LinearLayout.VERTICAL);inner.setPadding(dp(16),dp(8),dp(16),dp(16));card.addView(inner);
+        TextView heading=label(inner,title,20);heading.setTypeface(null,android.graphics.Typeface.BOLD);
+        if(description!=null){TextView subtitle=label(inner,description,13);subtitle.setTextColor(0xff5c6069);subtitle.setPadding(0,0,0,dp(8));}
+        return inner;
+    }
+    private void buildSetup(){
+        LinearLayout pictures=section(setup,"当前图片","读取壁纸，或选择图片后调整裁切区域");
+        image=new ImageView(this);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);pictures.addView(image,new LinearLayout.LayoutParams(-1,dp(200)));imageInfo=label(pictures,"",14);showImage();
+        actions(pictures,"读取当前壁纸",this::wallpaper,"选择图片",()->{imageGeneration++;Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,PICK_IMAGE);});
+        progress=new ProgressBar(this);progress.setVisibility(View.GONE);LinearLayout.LayoutParams progressParams=new LinearLayout.LayoutParams(dp(36),dp(36));progressParams.gravity=Gravity.CENTER_HORIZONTAL;setup.addView(progress,progressParams);
+        LinearLayout color=section(setup,"主色与样式","点击候选色选择，长按复制色值");
+        candidatesBox=box(color);
+        View controls=getLayoutInflater().inflate(R.layout.view_theme_controls,color,false);color.addView(controls);seedInput=controls.findViewById(R.id.seed_input);TextInputLayout seedLayout=controls.findViewById(R.id.seed_layout);controls.findViewById(R.id.seed_apply).setOnClickListener(v->{try{seed=ThemeConfig.parseColor(seedInput.getText().toString().trim());colorRevision++;allowPendingAutoSeed=false;seedLayout.setError(null);calculate();}catch(Exception e){seedLayout.setError("请输入有效的不透明 HEX 颜色");}});
         styleSpinner=controls.findViewById(R.id.style_input);styleSpinner.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,styles));styleSpinner.setText(style,false);styleSpinner.setOnItemClickListener((parent,view,position,id)->{if(!style.equals(styles[position])){style=styles[position];calculate();}});
-        label(setup,"配色预览",22);previewBox=box(setup);label(setup,"应用到系统",22);permission=label(setup,"",14);button(setup,"复制 ADB 授权命令",()->copy("adb shell pm grant "+getPackageName()+" android.permission.WRITE_SECURE_SETTINGS"));applyButton=button(setup,"应用到系统",()->{if(!settings.hasPermission()){toast("请先授予特殊权限");return;}int s=seed;String st=style;run(()->{settings.apply(s,st);return "配置写入并回读成功；系统颜色资源可能稍后更新。";},msg->{toast(msg);refreshSystem();});});
-        label(setup,"配置管理",22);button(setup,"导入配置",()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE),IMPORT));button(setup,"导出配置",()->export(false));button(setup,"备份与恢复",this::backups);updatePermission();updateCandidates();}
-    private void buildCurrent(){label(current,"当前系统主题",22);systemBox=box(current);button(current,"刷新当前配色",this::refreshSystem);button(current,"导出当前配色",()->export(true));}
+        LinearLayout paletteSection=section(setup,"配色预览","左右滑动查看色阶，点击色块查看色值");previewBox=box(paletteSection);
+        LinearLayout apply=section(setup,"应用到系统","写入前会自动备份当前系统配置");permission=label(apply,"",14);applyButton=button(apply,"应用到系统",()->{if(!settings.hasPermission()){toast("请先授予特殊权限");return;}int s=seed;String st=style;run(()->{settings.apply(s,st);return "配置写入并回读成功；系统颜色资源可能稍后更新。";},msg->{toast(msg);refreshSystem();});});buttonSecondary(apply,"复制 ADB 授权命令",()->copy("adb shell pm grant "+getPackageName()+" android.permission.WRITE_SECURE_SETTINGS"));
+        LinearLayout manage=section(setup,"配置管理","导入只更新预览，不会自动修改系统");actions(manage,"导入配置",()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE),IMPORT),"导出配置",()->export(false));buttonSecondary(manage,"备份与恢复",this::backups);updatePermission();updateCandidates();
+    }
+    private void buttonSecondary(LinearLayout parent,String text,Runnable r){parent.addView(action(text,r,true),new LinearLayout.LayoutParams(-1,-2));}
+    private void buildCurrent(){
+        LinearLayout controls=section(current,"系统配色","显示从设备实际读取的主题和颜色资源");actions(controls,"刷新",this::refreshSystem,"导出当前配色",()->export(true));
+        LinearLayout colors=section(current,"主题参数与色阶","左右滑动查看色阶，点击色块查看色值");systemBox=box(colors);
+    }
     private void updatePermission(){boolean granted=settings.hasPermission();permission.setText(granted?"已授予系统写入权限":"尚未授予 WRITE_SECURE_SETTINGS。请在电脑运行下方命令；其他功能仍可使用。");if(applyButton!=null)applyButton.setEnabled(granted);}
     private void showImage(){if(image==null)return;if(imagePath==null){imageInfo.setText("尚未选择图片");return;}String path=imagePath;String label=source;imageInfo.setText("正在加载图片…");run(()->{BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(path,bounds);if(bounds.outWidth<=0||bounds.outHeight<=0)throw new IOException("无法读取图片预览");BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=1;while(Math.max(bounds.outWidth/options.inSampleSize,bounds.outHeight/options.inSampleSize)>1024)options.inSampleSize*=2;Bitmap b=BitmapFactory.decodeFile(path,options);if(b==null)throw new IOException("无法解码图片预览");return new Object[]{b,bounds.outWidth,bounds.outHeight};},result->{if(!path.equals(imagePath)){((Bitmap)result[0]).recycle();return;}image.setImageBitmap((Bitmap)result[0]);imageInfo.setText(label+" · "+result[1]+" × "+result[2]);});}
-    private void updateCandidates(){candidatesBox.removeAllViews();for(int c:candidates){MaterialButton b=new MaterialButton(this);b.setText(ThemeConfig.color(c)+(c==seed?"  已选择":""));GradientDrawable circle=new GradientDrawable();circle.setShape(GradientDrawable.OVAL);circle.setColor(c);circle.setStroke(dp(c==seed?3:1),c==seed?0xff20232a:0xff777777);b.setIcon(circle);b.setIconSize(dp(32));b.setIconTint(null);b.setContentDescription(ThemeConfig.color(c)+(c==seed?"，已选择":"，点击选择，长按复制"));b.setOnClickListener(v->{seed=c;colorRevision++;allowPendingAutoSeed=false;calculate();});b.setOnLongClickListener(v->{copy(ThemeConfig.color(c));return true;});candidatesBox.addView(b);}}
+    private void updateCandidates(){
+        candidatesBox.removeAllViews();
+        if(candidates.isEmpty()){TextView hint=label(candidatesBox,"选择图片后将在这里显示候选色",14);hint.setTextColor(0xff5c6069);return;}
+        HorizontalScrollView scroll=new HorizontalScrollView(this);scroll.setFillViewport(false);scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);scroll.addView(row);candidatesBox.addView(scroll);
+        for(int c:candidates){MaterialButton b=action(ThemeConfig.color(c)+(c==seed?"  已选择":""),()->{seed=c;colorRevision++;allowPendingAutoSeed=false;calculate();},true);GradientDrawable circle=new GradientDrawable();circle.setShape(GradientDrawable.OVAL);circle.setColor(c);circle.setStroke(dp(c==seed?3:1),c==seed?0xff20232a:0xff777777);b.setIcon(circle);b.setIconSize(dp(28));b.setIconTint(null);b.setContentDescription(ThemeConfig.color(c)+(c==seed?"，已选择":"，点击选择，长按复制"));b.setOnLongClickListener(v->{copy(ThemeConfig.color(c));return true;});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2);lp.setMarginEnd(dp(8));row.addView(b,lp);}
+    }
     private void calculate(){final int generation=++sequence, s=seed;final String st=style;palette=null;seedInput.setText(ThemeConfig.color(seed));updateCandidates();run(()->MonetEngine.palette(s,st),p->{if(generation!=sequence)return;palette=p;displayPalette(previewBox,boxed(p));});}
     private Integer[][] boxed(int[][] p){Integer[][] out=new Integer[5][13];for(int g=0;g<5;g++)for(int i=0;i<13;i++)out[g][i]=p[g][i];return out;}
     private void displayPalette(LinearLayout parent,Integer[][] colors){parent.removeAllViews();for(int g=0;g<5;g++){label(parent,ThemeConfig.GROUPS[g],16);HorizontalScrollView h=new HorizontalScrollView(this);LinearLayout row=new LinearLayout(this);h.addView(row);parent.addView(h);for(int i=0;i<13;i++){final Integer c=colors[g][i];final String name=ThemeConfig.GROUPS[g]+"_"+ThemeConfig.INDICES[i];TextView sw=new TextView(this);sw.setGravity(Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);sw.setText(c==null?"不可用":String.valueOf(ThemeConfig.INDICES[i]));sw.setTextSize(9);sw.setTextColor(c!=null&&Color.luminance(c)<.35?Color.WHITE:Color.BLACK);sw.setBackgroundColor(c==null?0xffdddddd:c);sw.setContentDescription(name+" "+(c==null?"不可用":ThemeConfig.color(c)));sw.setOnClickListener(v->{if(c!=null)new MaterialAlertDialogBuilder(this).setTitle(name).setMessage("HEX: "+String.format(Locale.ROOT,"#%06X",c&0xffffff)+"\nARGB: "+ThemeConfig.color(c)).setPositiveButton("复制 ARGB",(d,w)->copy(ThemeConfig.color(c))).setNegativeButton("关闭",null).show();});row.addView(sw,new LinearLayout.LayoutParams(dp(46),dp(56)));}}}

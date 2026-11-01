@@ -37,7 +37,7 @@ public final class CropActivity extends AppCompatActivity {
         super.onCreate(state); setContentView(R.layout.activity_crop);
         if(state!=null) { float[] r=state.getFloatArray("crop_rect"); if(r!=null && r.length==4) savedCrop=new RectF(r[0],r[1],r[2],r[3]); }
         View root=findViewById(R.id.crop_root);
-        root.setOnApplyWindowInsetsListener((v,insets) -> { android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()); v.setPadding(bars.left,bars.top,bars.right,bars.bottom); return insets; });
+        root.setOnApplyWindowInsetsListener((v,insets) -> { android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()); v.setPadding(bars.left,bars.top,bars.right,bars.bottom); return insets; });
         MaterialToolbar toolbar=findViewById(R.id.crop_toolbar);
         toolbar.setNavigationIcon(androidx.appcompat.R.drawable.abc_ic_ab_back_material); toolbar.setNavigationOnClickListener(v -> finish());
         image=findViewById(R.id.crop_image); progress=findViewById(R.id.crop_progress); done=findViewById(R.id.crop_done); reset=findViewById(R.id.crop_reset);
