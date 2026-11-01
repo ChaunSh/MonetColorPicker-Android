@@ -1,0 +1,9 @@
+Material Color Utilities (Java)
+
+The files under app/src/main/java/com/wallpapermonet/companion/mcu are
+from https://github.com/material-foundation/material-color-utilities,
+commit bd811e4ca2ab94c4ce3cadc89c19b1820b9704b3 (Apache-2.0).
+They retain their original copyright and license headers. Package and import
+names were relocated to avoid clashes. MonetEngine.java adapts the 2021
+scheme palette parameters from the upstream ColorSpec2021 implementation.
+The accompanying license is material-color-utilities-LICENSE.txt.

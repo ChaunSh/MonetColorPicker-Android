@@ -1,0 +1,86 @@
+package com.wallpapermonet.companion;
+
+import android.app.*;
+import android.content.*;
+import android.graphics.*;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Bundle;
+import android.view.*;
+import android.widget.*;
+import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.textfield.TextInputLayout;
+import com.google.android.material.textfield.MaterialAutoCompleteTextView;
+import org.json.JSONObject;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.concurrent.*;
+
+public final class MainActivity extends androidx.appcompat.app.AppCompatActivity {
+    private static final int PICK_IMAGE=1, CROP=2, IMPORT=3, EXPORT=4;
+    private final ExecutorService worker=Executors.newSingleThreadExecutor();
+    private SystemThemeManager settings;
+    private LinearLayout setup, current, candidatesBox, previewBox, systemBox;
+    private ImageView image; private TextView imageInfo, permission; private EditText seedInput;
+    private ProgressBar progress; private FrameLayout content; private MaterialToolbar toolbar; private MaterialAutoCompleteTextView styleSpinner; private MaterialButton applyButton;
+    private int seed=0xff4285f4; private String style="TONAL_SPOT", imagePath, source="无图片";
+    private int[][] palette; private List<Integer> candidates=new ArrayList<>();
+    private Integer[][] systemPalette; private Integer systemSeed; private String systemStyle, systemSource;
+    private String pendingExport; private int sequence;
+    private final String[] styles=MonetEngine.STYLES;
+    @Override public void onCreate(Bundle b) { super.onCreate(b); setContentView(R.layout.activity_main); settings=new SystemThemeManager(this);
+        if(b!=null){seed=b.getInt("seed",seed);style=b.getString("style",style);imagePath=b.getString("imagePath");source=b.getString("source",source);pendingExport=b.getString("pendingExport");int[] a=b.getIntArray("candidates");if(a!=null)for(int c:a)candidates.add(c);}
+        content=findViewById(R.id.content);toolbar=findViewById(R.id.toolbar);
+        View root=findViewById(R.id.root); root.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets i=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());v.setPadding(i.left,i.top,i.right,i.bottom);return insets;});
+        setup=page();current=page();buildSetup();buildCurrent();showPage(false); BottomNavigationView nav=findViewById(R.id.navigation);nav.setOnItemSelectedListener(item->{showPage(item.getItemId()==R.id.current);return true;});if(b!=null&&b.getBoolean("currentPage"))nav.setSelectedItemId(R.id.current);calculate();
+    }
+    @Override protected void onSaveInstanceState(Bundle b){super.onSaveInstanceState(b);b.putInt("seed",seed);b.putString("style",style);b.putString("imagePath",imagePath);b.putString("source",source);b.putString("pendingExport",pendingExport);BottomNavigationView nav=findViewById(R.id.navigation);b.putBoolean("currentPage",nav.getSelectedItemId()==R.id.current);int[] a=new int[candidates.size()];for(int i=0;i<a.length;i++)a[i]=candidates.get(i);b.putIntArray("candidates",a);}
+    @Override protected void onResume(){super.onResume();if(permission!=null) updatePermission();}
+    @Override protected void onDestroy(){super.onDestroy();worker.shutdown();}
+    private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
+    private LinearLayout page(){ScrollView s=new ScrollView(this);s.setFillViewport(true); LinearLayout p=new LinearLayout(this);p.setOrientation(LinearLayout.VERTICAL);p.setPadding(dp(20),dp(8),dp(20),dp(32));s.addView(p);p.setTag(s);return p;}
+    private void showPage(boolean now){content.removeAllViews();View v=(View)(now?current:setup).getTag();content.addView(v);toolbar.setTitle(now?"当前配色":"设置配色");if(now)refreshSystem();}
+    private TextView label(LinearLayout p,String text,int size){TextView t=new TextView(this);t.setText(text);t.setTextSize(size);t.setTextColor(0xff20232a);t.setPadding(0,dp(10),0,dp(6));p.addView(t);return t;}
+    private MaterialButton button(LinearLayout p,String text,Runnable r){MaterialButton b=new MaterialButton(this);b.setText(text);b.setOnClickListener(v->r.run());p.addView(b,new LinearLayout.LayoutParams(-1,-2));return b;}
+    private LinearLayout box(LinearLayout p){LinearLayout b=new LinearLayout(this);b.setOrientation(LinearLayout.VERTICAL);p.addView(b);return b;}
+    private void buildSetup(){label(setup,"当前图片",22);image=new ImageView(this);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);setup.addView(image,new LinearLayout.LayoutParams(-1,dp(220))); imageInfo=label(setup,"",14);showImage();
+        button(setup,"读取当前壁纸",this::wallpaper);button(setup,"选择图片并裁切",()->{Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,PICK_IMAGE);});
+        progress=new ProgressBar(this);progress.setVisibility(View.GONE);setup.addView(progress);label(setup,"候选主色",22);candidatesBox=box(setup);
+        View controls=getLayoutInflater().inflate(R.layout.view_theme_controls,setup,false);setup.addView(controls);seedInput=controls.findViewById(R.id.seed_input);TextInputLayout seedLayout=controls.findViewById(R.id.seed_layout);controls.findViewById(R.id.seed_apply).setOnClickListener(v->{try{seed=ThemeConfig.parseColor(seedInput.getText().toString().trim());seedLayout.setError(null);calculate();}catch(Exception e){seedLayout.setError("请输入有效的不透明 HEX 颜色");}});
+        styleSpinner=controls.findViewById(R.id.style_input);styleSpinner.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_list_item_1,styles));styleSpinner.setText(style,false);styleSpinner.setOnItemClickListener((parent,view,position,id)->{if(!style.equals(styles[position])){style=styles[position];calculate();}});
+        label(setup,"配色预览",22);previewBox=box(setup);label(setup,"应用到系统",22);permission=label(setup,"",14);button(setup,"复制 ADB 授权命令",()->copy("adb shell pm grant "+getPackageName()+" android.permission.WRITE_SECURE_SETTINGS"));applyButton=button(setup,"应用到系统",()->{if(!settings.hasPermission()){toast("请先授予特殊权限");return;}int s=seed;String st=style;run(()->{settings.apply(s,st);return "配置写入并回读成功；系统颜色资源可能稍后更新。";},msg->{toast(msg);refreshSystem();});});
+        label(setup,"配置管理",22);button(setup,"导入配置",()->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE),IMPORT));button(setup,"导出配置",()->export(false));button(setup,"备份与恢复",this::backups);updatePermission();updateCandidates();}
+    private void buildCurrent(){label(current,"当前系统主题",22);systemBox=box(current);button(current,"刷新当前配色",this::refreshSystem);button(current,"导出当前配色",()->export(true));}
+    private void updatePermission(){boolean granted=settings.hasPermission();permission.setText(granted?"已授予系统写入权限":"尚未授予 WRITE_SECURE_SETTINGS。请在电脑运行下方命令；其他功能仍可使用。");if(applyButton!=null)applyButton.setEnabled(granted);}
+    private void showImage(){if(image==null)return;if(imagePath==null){imageInfo.setText("尚未选择图片");return;}String path=imagePath;String label=source;imageInfo.setText("正在加载图片…");run(()->{BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(path,bounds);if(bounds.outWidth<=0||bounds.outHeight<=0)throw new IOException("无法读取图片预览");BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=1;while(Math.max(bounds.outWidth/options.inSampleSize,bounds.outHeight/options.inSampleSize)>1024)options.inSampleSize*=2;Bitmap b=BitmapFactory.decodeFile(path,options);if(b==null)throw new IOException("无法解码图片预览");return new Object[]{b,bounds.outWidth,bounds.outHeight};},result->{if(!path.equals(imagePath)){((Bitmap)result[0]).recycle();return;}image.setImageBitmap((Bitmap)result[0]);imageInfo.setText(label+" · "+result[1]+" × "+result[2]);});}
+    private void updateCandidates(){candidatesBox.removeAllViews();for(int c:candidates){MaterialButton b=new MaterialButton(this);b.setText(ThemeConfig.color(c)+(c==seed?"  已选择":""));GradientDrawable circle=new GradientDrawable();circle.setShape(GradientDrawable.OVAL);circle.setColor(c);circle.setStroke(dp(c==seed?3:1),c==seed?0xff20232a:0xff777777);b.setIcon(circle);b.setIconSize(dp(32));b.setIconTint(null);b.setContentDescription(ThemeConfig.color(c)+(c==seed?"，已选择":"，点击选择，长按复制"));b.setOnClickListener(v->{seed=c;calculate();});b.setOnLongClickListener(v->{copy(ThemeConfig.color(c));return true;});candidatesBox.addView(b);}}
+    private void calculate(){final int generation=++sequence, s=seed;final String st=style;palette=null;seedInput.setText(ThemeConfig.color(seed));updateCandidates();run(()->MonetEngine.palette(s,st),p->{if(generation!=sequence)return;palette=p;displayPalette(previewBox,boxed(p));});}
+    private Integer[][] boxed(int[][] p){Integer[][] out=new Integer[5][13];for(int g=0;g<5;g++)for(int i=0;i<13;i++)out[g][i]=p[g][i];return out;}
+    private void displayPalette(LinearLayout parent,Integer[][] colors){parent.removeAllViews();for(int g=0;g<5;g++){label(parent,ThemeConfig.GROUPS[g],16);HorizontalScrollView h=new HorizontalScrollView(this);LinearLayout row=new LinearLayout(this);h.addView(row);parent.addView(h);for(int i=0;i<13;i++){final Integer c=colors[g][i];final String name=ThemeConfig.GROUPS[g]+"_"+ThemeConfig.INDICES[i];TextView sw=new TextView(this);sw.setGravity(Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);sw.setText(c==null?"不可用":String.valueOf(ThemeConfig.INDICES[i]));sw.setTextSize(9);sw.setTextColor(c!=null&&Color.luminance(c)<.35?Color.WHITE:Color.BLACK);sw.setBackgroundColor(c==null?0xffdddddd:c);sw.setContentDescription(name+" "+(c==null?"不可用":ThemeConfig.color(c)));sw.setOnClickListener(v->{if(c!=null)new MaterialAlertDialogBuilder(this).setTitle(name).setMessage("HEX: "+String.format(Locale.ROOT,"#%06X",c&0xffffff)+"\nARGB: "+ThemeConfig.color(c)).setPositiveButton("复制 ARGB",(d,w)->copy(ThemeConfig.color(c))).setNegativeButton("关闭",null).show();});row.addView(sw,new LinearLayout.LayoutParams(dp(46),dp(56)));}}}
+    // Wallpaper access is vendor/version dependent. We deliberately request no broad storage
+    // permission; a denied API call is caught and presented as an actionable error.
+    @android.annotation.SuppressLint("MissingPermission")
+    private void wallpaper(){run(()->{WallpaperManager wm=WallpaperManager.getInstance(this);if(wm.getWallpaperInfo()!=null)throw new IOException("动态壁纸无法读取，请选择本地图片");Drawable d;try{d=wm.getDrawable();}catch(SecurityException e){throw new IOException("系统限制读取当前壁纸，请使用“选择图片并裁切”",e);}if(d==null)throw new IOException("系统未返回壁纸，请选择本地图片");int w=d.getIntrinsicWidth(),h=d.getIntrinsicHeight();if(w<=0||h<=0||(long)w*h>40000000)throw new IOException("壁纸尺寸过大或不可用，请选择本地图片");Bitmap b=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);try{Canvas c=new Canvas(b);d.setBounds(0,0,w,h);d.draw(c);File f=new File(getCacheDir(),"wallpaper-"+System.currentTimeMillis()+".png");try(FileOutputStream o=new FileOutputStream(f)){if(!b.compress(Bitmap.CompressFormat.PNG,100,o))throw new IOException("保存失败");}return f.getAbsolutePath();}finally{b.recycle();}},p->{imagePath=p;source="系统主屏幕壁纸";showImage();analyze(p);});}
+    private void analyze(String path){run(()->{BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;BitmapFactory.decodeFile(path,o);o.inJustDecodeBounds=false;o.inSampleSize=1;while(Math.max(o.outWidth/o.inSampleSize,o.outHeight/o.inSampleSize)>1040)o.inSampleSize*=2;Bitmap b=BitmapFactory.decodeFile(path,o);if(b==null)throw new IOException("无法解码图片");try{return MonetEngine.candidates(b);}finally{b.recycle();}},list->{candidates=list;if(!list.isEmpty())seed=list.get(0);calculate();});}
+    @Override protected void onActivityResult(int request,int result,Intent data){
+        super.onActivityResult(request,result,data);
+        if(result!=RESULT_OK||data==null){if(request==EXPORT)pendingExport=null;return;}
+        if(request==PICK_IMAGE){if(data.getData()==null){toast("未获取图片");return;}Intent i=new Intent(this,CropActivity.class).setData(data.getData()).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);startActivityForResult(i,CROP);}
+        else if(request==CROP){String path=data.getStringExtra(CropActivity.EXTRA_RESULT_PATH);if(path==null||!new File(path).isFile()){toast("无法读取裁切结果");return;}imagePath=path;source="外部图片（已裁切）";showImage();analyze(imagePath);}
+        else if(request==IMPORT){Uri uri=data.getData();if(uri==null){toast("未选择配置文件");return;}run(()->{try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException("无法打开配置文件");return ThemeConfig.read(in);}},c->{if(!c.canEdit()){toast("快照缺少可重建的主色或样式");return;}int position=Arrays.asList(styles).indexOf(c.style);if(position<0){toast("暂不支持该样式");return;}seed=c.seed;style=c.style;styleSpinner.setText(style,false);calculate();final int generation=sequence;run(()->MonetEngine.palette(c.seed,c.style),p->{if(generation==sequence&&!c.matches(p))toast("导入的色板与当前算法结果不同，已重新计算");});toast("已导入编辑状态，未写入系统");});}
+        else if(request==EXPORT){String json=pendingExport;pendingExport=null;Uri uri=data.getData();if(json==null||uri==null){toast("导出状态不可用，请重试");return;}run(()->{try(OutputStream o=getContentResolver().openOutputStream(uri,"w")){if(o==null)throw new IOException("无法打开目标文件");o.write(json.getBytes(StandardCharsets.UTF_8));}return "导出成功";},this::toast);}
+    }
+    private void refreshSystem(){run(()->{String raw=settings.readRaw();JSONObject j=new JSONObject();boolean malformed=false;if(raw!=null&&!raw.trim().isEmpty())try{j=new JSONObject(raw);}catch(Exception e){malformed=true;}Integer s=null;try{String x=j.optString(SystemThemeManager.PALETTE);if(!x.isEmpty())s=ThemeConfig.parseColor("#"+x);}catch(Exception ignored){}Integer[][] colors=new Integer[5][13];for(int g=0;g<5;g++)for(int i=0;i<13;i++){int id=getResources().getIdentifier("system_"+ThemeConfig.GROUPS[g]+"_"+ThemeConfig.INDICES[i],"color","android");if(id!=0)try{colors[g][i]=getColor(id);}catch(Exception ignored){}}return new Object[]{s,j.optString(SystemThemeManager.STYLE,null),j.optString(SystemThemeManager.SOURCE,null),colors,malformed};},a->{systemSeed=(Integer)a[0];systemStyle=(String)a[1];systemSource=(String)a[2];systemPalette=(Integer[][])a[3];systemBox.removeAllViews();label(systemBox,((Boolean)a[4]?"系统主题配置格式无效，无法读取参数。\n":"")+"主色："+(systemSeed==null?"不可用":ThemeConfig.color(systemSeed))+"\n样式："+(systemStyle==null?"不可用":systemStyle)+"\n来源："+(systemSource==null?"不可用":systemSource),15);displayPalette(box(systemBox),systemPalette);});}
+    private void export(boolean system){try{if(system&&systemPalette==null){toast("请先刷新系统配色");return;}if(!system&&palette==null){toast("配色计算中");return;}pendingExport=ThemeConfig.export(system?"system-snapshot":"editable-theme",system?systemSeed:Integer.valueOf(seed),system?systemStyle:style,system?systemSource:"preset",system?systemPalette:boxed(palette));String name=(system?"MonetSystem_":"MonetTheme_")+new SimpleDateFormat("yyyyMMdd_HHmmss",Locale.ROOT).format(new Date())+".json";startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/json").putExtra(Intent.EXTRA_TITLE,name),EXPORT);}catch(Exception e){error(e);}}
+    private void backups(){List<String> ids=settings.listBackups();if(ids.isEmpty()){toast("暂无备份");return;}String[] names=ids.toArray(new String[0]);new MaterialAlertDialogBuilder(this).setTitle("备份历史（最新在前）").setItems(names,(d,which)->{String id=names[which];new MaterialAlertDialogBuilder(this).setTitle("备份操作").setMessage(id).setPositiveButton("恢复",(x,y)->new MaterialAlertDialogBuilder(this).setTitle("确认恢复？").setMessage("将完整写回该备份的系统配置。当前配置会先备份。").setNegativeButton("取消",null).setPositiveButton("确认恢复",(z,k)->run(()->{settings.restore(id);return "已恢复并回读验证";},msg->{toast(msg);refreshSystem();})).show()).setNeutralButton("删除",(x,y)->{settings.deleteBackup(id);toast("已删除");}).setNegativeButton("取消",null).show();}).show();}
+    private void copy(String s){((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Monet",s));toast("已复制");}
+    private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();} private void error(Throwable e){toast("操作失败："+(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage()));}
+    interface Work<T>{T run() throws Exception;} interface Done<T>{void accept(T value);}
+    private <T> void run(Work<T> w,Done<T> d){if(progress!=null)progress.setVisibility(View.VISIBLE);worker.execute(()->{try{T value=w.run();runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){if(progress!=null)progress.setVisibility(View.GONE);d.accept(value);}});}catch(Throwable e){runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){if(progress!=null)progress.setVisibility(View.GONE);error(e);}});}});}
+}

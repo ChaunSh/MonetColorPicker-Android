@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical">
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/seed_layout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:hint="Seed Color" app:helperText="输入 #RRGGBB 或 #AARRGGBB">
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/seed_input" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:inputType="textNoSuggestions" android:maxLines="1" android:singleLine="true" />
+    </com.google.android.material.textfield.TextInputLayout>
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/seed_apply" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="设置主色" />
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/style_layout" style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:layout_marginTop="16dp" android:hint="主题样式">
+        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+            android:id="@+id/style_input" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:inputType="none" />
+    </com.google.android.material.textfield.TextInputLayout>
+</LinearLayout>

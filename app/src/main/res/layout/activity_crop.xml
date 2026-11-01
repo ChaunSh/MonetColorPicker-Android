@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/crop_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="#FFF9F9FC">
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/crop_toolbar" android:layout_width="match_parent" android:layout_height="wrap_content"
+        app:title="裁切图片" />
+    <com.wallpapermonet.companion.CropImageView
+        android:id="@+id/crop_image" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+    <ProgressBar android:id="@+id/crop_progress" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" />
+    <TextView android:id="@+id/crop_ratio" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:gravity="center" android:padding="8dp" android:textColor="#34343A" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="end" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingBottom="12dp">
+        <com.google.android.material.button.MaterialButton android:id="@+id/crop_cancel" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="取消" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/crop_reset" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="重置" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/crop_done" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="完成" />
+    </LinearLayout>
+</LinearLayout>
