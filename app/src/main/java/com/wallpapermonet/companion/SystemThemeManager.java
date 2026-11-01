@@ -25,6 +25,7 @@ public final class SystemThemeManager {
     public static final String PALETTE = "android.theme.customization.system_palette";
     public static final String STYLE = "android.theme.customization.theme_style";
     public static final String SOURCE = "android.theme.customization.color_source";
+    private static final int MAX_BACKUP_BYTES = 1024 * 1024;
     private final Context context;
     private final File directory;
 
@@ -110,13 +111,19 @@ public final class SystemThemeManager {
         return new File(directory, id);
     }
     private void writeBackup(String id, JSONObject obj) throws Exception {
+        byte[] bytes = backupBytes(obj);
         AtomicFile file = new AtomicFile(backupFile(id));
         FileOutputStream out = file.startWrite();
         try {
-            out.write(obj.toString(2).getBytes(StandardCharsets.UTF_8));
+            out.write(bytes);
             out.getFD().sync();
             file.finishWrite(out);
         } catch (Exception e) { file.failWrite(out); throw e; }
+    }
+    static byte[] backupBytes(JSONObject obj) throws Exception {
+        byte[] bytes = obj.toString(2).getBytes(StandardCharsets.UTF_8);
+        if (bytes.length > MAX_BACKUP_BYTES) throw new IllegalArgumentException("备份过大，已停止写入");
+        return bytes;
     }
     private void setResult(String id, String result) throws Exception {
         JSONObject obj = readBackup(id); obj.put("result", result); writeBackup(id, obj);
@@ -126,7 +133,7 @@ public final class SystemThemeManager {
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
             byte[] buffer = new byte[4096]; int n;
             while ((n = in.read(buffer)) != -1) {
-                if (out.size() + n > 1024 * 1024) throw new IllegalArgumentException("备份过大");
+                if (out.size() + n > MAX_BACKUP_BYTES) throw new IllegalArgumentException("备份过大");
                 out.write(buffer, 0, n);
             }
             return new JSONObject(new String(out.toByteArray(), StandardCharsets.UTF_8));

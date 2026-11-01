@@ -58,7 +58,10 @@ public final class CropActivity extends AppCompatActivity {
     }
     private void save() {
         if(info==null) return;
-        RectF crop=image.getNormalizedCrop(); busy(true);
+        final RectF crop;
+        try { crop=image.getNormalizedCrop(); }
+        catch (IllegalStateException e) { Toast.makeText(this,"图片尚未准备好，请稍后重试",Toast.LENGTH_SHORT).show(); return; }
+        busy(true);
         worker.execute(() -> {
             try { File file=ImageProcessor.crop(this,uri,info,crop,targetWidth,targetHeight);
                 if(destroyed) { file.delete(); return; }
@@ -69,7 +72,7 @@ public final class CropActivity extends AppCompatActivity {
     private void busy(boolean value) { progress.setVisibility(value?View.VISIBLE:View.GONE); done.setEnabled(!value); reset.setEnabled(!value); }
     private void failure(String message) { if(!destroyed) { Toast.makeText(this,message,Toast.LENGTH_LONG).show(); finish(); } }
     @Override protected void onSaveInstanceState(Bundle out) {
-        if(info!=null) { RectF r=image.getNormalizedCrop(); out.putFloatArray("crop_rect",new float[]{r.left,r.top,r.right,r.bottom}); }
+        if(info!=null) { try { RectF r=image.getNormalizedCrop(); out.putFloatArray("crop_rect",new float[]{r.left,r.top,r.right,r.bottom}); } catch (IllegalStateException ignored) { } }
         else if(savedCrop!=null) out.putFloatArray("crop_rect",new float[]{savedCrop.left,savedCrop.top,savedCrop.right,savedCrop.bottom});
         super.onSaveInstanceState(out);
     }

@@ -40,12 +40,18 @@ public final class CropImageView extends View {
         bitmap = image; aspect = (float) width / height; reset();
     }
 
-    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w,h,oldw,oldh); reset(); }
+    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        // A resize (for example, entering split-screen) must preserve the composition.
+        RectF previous = bitmap != null && !frame.isEmpty() ? getNormalizedCrop() : null;
+        super.onSizeChanged(w,h,oldw,oldh);
+        reset();
+        if (previous != null) restoreCrop(previous);
+    }
 
     public void reset() {
         if (bitmap == null || getWidth() == 0 || getHeight() == 0) return;
-        float availableW = getWidth() - 32 * getResources().getDisplayMetrics().density;
-        float availableH = getHeight() - 32 * getResources().getDisplayMetrics().density;
+        float availableW = Math.max(1, getWidth() - 32 * getResources().getDisplayMetrics().density);
+        float availableH = Math.max(1, getHeight() - 32 * getResources().getDisplayMetrics().density);
         float w = Math.min(availableW, availableH * aspect), h = w / aspect;
         frame.set((getWidth()-w)/2, (getHeight()-h)/2, (getWidth()+w)/2, (getHeight()+h)/2);
         minimumScale = Math.max(w / bitmap.getWidth(), h / bitmap.getHeight());
@@ -66,7 +72,7 @@ public final class CropImageView extends View {
     /** Returns crop in the EXIF-oriented source's unit coordinate space. */
     public RectF getNormalizedCrop() {
         Matrix inverse = new Matrix();
-        if (bitmap == null || !imageMatrix.invert(inverse)) throw new IllegalStateException("图片尚未加载");
+        if (bitmap == null || frame.isEmpty() || !imageMatrix.invert(inverse)) throw new IllegalStateException("图片尚未加载");
         RectF crop = new RectF(frame); inverse.mapRect(crop);
         crop.left = Math.max(0, crop.left / bitmap.getWidth()); crop.right = Math.min(1, crop.right / bitmap.getWidth());
         crop.top = Math.max(0, crop.top / bitmap.getHeight()); crop.bottom = Math.min(1, crop.bottom / bitmap.getHeight());

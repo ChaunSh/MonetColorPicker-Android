@@ -1,1 +1,11 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"/><application android:label="Monet 配色" android:theme="@style/AppTheme" android:allowBackup="false"><activity android:name=".CropActivity" android:exported="false"/><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <!-- Granted only through ADB by the device owner, never requested as a runtime permission. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+    <!-- Required by WallpaperManager to access the user's wallpaper on Android 11+. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <queries><intent><action android:name="android.service.wallpaper.WallpaperService" /></intent></queries>
+    <application android:label="Monet 配色" android:theme="@style/AppTheme" android:allowBackup="false">
+        <activity android:name=".CropActivity" android:exported="false" />
+        <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+    </application>
+</manifest>

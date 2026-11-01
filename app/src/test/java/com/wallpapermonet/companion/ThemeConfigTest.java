@@ -47,4 +47,28 @@ public class ThemeConfigTest {
             try { ThemeConfig.parse(invalid); fail(invalid); } catch (IllegalArgumentException expected) { }
         }
     }
+    @Test public void rejectsCoercedVersionAndMalformedUtf8() throws Exception {
+        Integer[][] colors = new Integer[5][13];
+        for (int g = 0; g < 5; g++) for (int i = 0; i < 13; i++) colors[g][i] = 0xff123456;
+        String valid = ThemeConfig.export("editable-theme", 0xff123456, "TONAL_SPOT", "preset", colors);
+        JSONObject original = new JSONObject(valid);
+        for (Object version : new Object[]{"1", 1.5, 2}) {
+            JSONObject changed = new JSONObject(original.toString()); changed.put("schemaVersion", version);
+            try { ThemeConfig.parse(changed.toString()); fail("accepted version " + version); }
+            catch (IllegalArgumentException expected) { }
+        }
+        byte[] invalid = new byte[]{'{', (byte) 0xc3, 0x28, '}'};
+        try { ThemeConfig.read(new java.io.ByteArrayInputStream(invalid)); fail("accepted malformed UTF-8"); }
+        catch (java.nio.charset.CharacterCodingException expected) { }
+        try { ThemeConfig.export("editable-theme", 0x00123456, "TONAL_SPOT", "preset", colors); fail("accepted transparent seed"); }
+        catch (IllegalArgumentException expected) { }
+    }
+    @Test public void refusesBackupLargerThanRestoreLimitBeforeWriting() throws Exception {
+        JSONObject backup = new JSONObject();
+        backup.put("previousRawValue", "\\".repeat(600000));
+        try { SystemThemeManager.backupBytes(backup); fail("accepted an unrestorable backup"); }
+        catch (IllegalArgumentException expected) { }
+        backup.put("previousRawValue", "small");
+        assertTrue(SystemThemeManager.backupBytes(backup).length < 1024 * 1024);
+    }
 }
